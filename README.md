@@ -77,7 +77,7 @@ nssm start WaTasksMCP
 ## Подключение Claude Code
 
 ```bash
-claude mcp add --transport http tracker http://tracker.local:7777/mcp \
+claude mcp add --transport http wa-tasks http://tracker.local:7777/mcp \
   --header "Authorization: Bearer ваш_секрет"
 ```
 
@@ -86,7 +86,7 @@ claude mcp add --transport http tracker http://tracker.local:7777/mcp \
 ```json
 {
   "mcpServers": {
-    "tracker": {
+    "wa-tasks": {
       "type": "http",
       "url": "http://tracker.local:7777/mcp",
       "headers": {
@@ -106,7 +106,7 @@ claude mcp add --transport http tracker http://tracker.local:7777/mcp \
 ```json
 {
   "mcpServers": {
-    "tracker": {
+    "wa-tasks": {
       "url": "http://tracker.local:7777/mcp",
       "headers": {
         "Authorization": "Bearer ваш_секрет"
