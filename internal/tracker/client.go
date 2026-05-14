@@ -30,19 +30,24 @@ func New(baseURL, accessToken string) *Client {
 
 // ----- DTO -----
 
+type Contact struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
 type Task struct {
-	ID                int     `json:"id"`
-	Number            string  `json:"number"` // "project_id.task_number"
-	ProjectID         int     `json:"project_id"`
-	StatusID          int     `json:"status_id"`
-	Name              string  `json:"name"`
-	Text              string  `json:"text,omitempty"`
-	AssignedContactID int     `json:"assigned_contact_id,omitempty"`
-	CreateContactID   int     `json:"create_contact_id,omitempty"`
-	CreateDatetime    string  `json:"create_datetime,omitempty"`
-	UpdateDatetime    string  `json:"update_datetime,omitempty"`
-	DueDate           string  `json:"due_date,omitempty"`
-	Priority          int     `json:"priority,omitempty"`
+	ID              int      `json:"id"`
+	Number          int      `json:"number"`
+	ProjectID       int      `json:"project_id"`
+	StatusID        int      `json:"status_id"`
+	Name            string   `json:"name"`
+	Text            string   `json:"text,omitempty"`
+	AssignedContact *Contact `json:"assigned_contact,omitempty"`
+	CreateContact   *Contact `json:"create_contact,omitempty"`
+	CreateDatetime  string   `json:"create_datetime,omitempty"`
+	UpdateDatetime  string   `json:"update_datetime,omitempty"`
+	DueDate         string   `json:"due_date,omitempty"`
+	Priority        int      `json:"priority,omitempty"`
 }
 
 type Project struct {
@@ -178,20 +183,19 @@ func (c *Client) ListTasks(ctx context.Context, hash string, limit, offset int) 
 	}
 
 	// Попытка 1: массив задач прямо в корне.
-	var asList []Task
-	if err := json.Unmarshal(raw, &asList); err == nil && len(asList) >= 0 {
-		// успех — проверяем, что это правда был массив
-		if len(raw) > 0 && raw[0] == '[' {
+	if len(raw) > 0 && raw[0] == '[' {
+		var asList []Task
+		if err := json.Unmarshal(raw, &asList); err == nil {
 			return asList, nil
 		}
 	}
 
-	// Попытка 2: объект с полем tasks.
+	// Попытка 2: объект с полем data ({"total_count":N,"data":[...]}).
 	var wrap struct {
-		Tasks []Task `json:"tasks"`
+		Data []Task `json:"data"`
 	}
 	if err := json.Unmarshal(raw, &wrap); err == nil {
-		return wrap.Tasks, nil
+		return wrap.Data, nil
 	}
 
 	return nil, fmt.Errorf("unexpected response shape: %s", string(raw))
@@ -214,17 +218,17 @@ func (c *Client) ListProjects(ctx context.Context) ([]Project, error) {
 	if err := c.doGet(ctx, "tasks.projects.getList", nil, &raw); err != nil {
 		return nil, err
 	}
-	var asList []Project
 	if len(raw) > 0 && raw[0] == '[' {
+		var asList []Project
 		if err := json.Unmarshal(raw, &asList); err == nil {
 			return asList, nil
 		}
 	}
 	var wrap struct {
-		Projects []Project `json:"projects"`
+		Data []Project `json:"data"`
 	}
 	if err := json.Unmarshal(raw, &wrap); err == nil {
-		return wrap.Projects, nil
+		return wrap.Data, nil
 	}
 	return nil, fmt.Errorf("unexpected response shape: %s", string(raw))
 }
@@ -234,17 +238,17 @@ func (c *Client) ListStatuses(ctx context.Context) ([]Status, error) {
 	if err := c.doGet(ctx, "tasks.statuses.getList", nil, &raw); err != nil {
 		return nil, err
 	}
-	var asList []Status
 	if len(raw) > 0 && raw[0] == '[' {
+		var asList []Status
 		if err := json.Unmarshal(raw, &asList); err == nil {
 			return asList, nil
 		}
 	}
 	var wrap struct {
-		Statuses []Status `json:"statuses"`
+		Data []Status `json:"data"`
 	}
 	if err := json.Unmarshal(raw, &wrap); err == nil {
-		return wrap.Statuses, nil
+		return wrap.Data, nil
 	}
 	return nil, fmt.Errorf("unexpected response shape: %s", string(raw))
 }

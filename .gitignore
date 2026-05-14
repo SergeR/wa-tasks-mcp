@@ -1,3 +1,6 @@
 .env
 .claude/
 *.exe
+*.exe~
+server_out.txt
+server_err.txt
