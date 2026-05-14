@@ -63,6 +63,8 @@ All configuration is via environment variables. See README.md for the full list.
 - `MCP_BEARER_SECRET` — Bearer token for MCP clients (any long random string)
 - `MCP_LISTEN_ADDR` — Server address (default: `127.0.0.1:7777`)
 
+Variables can also be placed in a `.env` file in the same directory as the executable — the server loads it at startup for any variable not already set in the environment. Copy `.env.example` to get started.
+
 ## MCP Tools
 
 The server exposes these tools to MCP clients:
