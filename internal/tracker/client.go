@@ -38,6 +38,7 @@ type Contact struct {
 type Task struct {
 	ID              int      `json:"id"`
 	Number          int      `json:"number"`
+	FullNumber      string   `json:"full_number,omitempty"`
 	ProjectID       int      `json:"project_id"`
 	StatusID        int      `json:"status_id"`
 	Name            string   `json:"name"`
@@ -48,6 +49,14 @@ type Task struct {
 	UpdateDatetime  string   `json:"update_datetime,omitempty"`
 	DueDate         string   `json:"due_date,omitempty"`
 	Priority        int      `json:"priority,omitempty"`
+}
+
+func fillFullNumber(tasks []Task) {
+	for i := range tasks {
+		if tasks[i].ProjectID > 0 && tasks[i].Number > 0 {
+			tasks[i].FullNumber = fmt.Sprintf("%d.%d", tasks[i].ProjectID, tasks[i].Number)
+		}
+	}
 }
 
 type Project struct {
@@ -186,6 +195,7 @@ func (c *Client) ListTasks(ctx context.Context, hash string, limit, offset int) 
 	if len(raw) > 0 && raw[0] == '[' {
 		var asList []Task
 		if err := json.Unmarshal(raw, &asList); err == nil {
+			fillFullNumber(asList)
 			return asList, nil
 		}
 	}
@@ -195,6 +205,7 @@ func (c *Client) ListTasks(ctx context.Context, hash string, limit, offset int) 
 		Data []Task `json:"data"`
 	}
 	if err := json.Unmarshal(raw, &wrap); err == nil {
+		fillFullNumber(wrap.Data)
 		return wrap.Data, nil
 	}
 
@@ -205,6 +216,9 @@ func (c *Client) CreateTask(ctx context.Context, in CreateTaskInput) (*Task, err
 	var out Task
 	if err := c.doPost(ctx, "tasks.tasks.add", in, &out); err != nil {
 		return nil, err
+	}
+	if out.ProjectID > 0 && out.Number > 0 {
+		out.FullNumber = fmt.Sprintf("%d.%d", out.ProjectID, out.Number)
 	}
 	return &out, nil
 }
