@@ -41,6 +41,7 @@ func New(tc *tracker.Client) *mcp.Server {
 		Name: "task_action",
 		Description: `Выполняет действие над задачей и переводит её в другой статус.
 action: "close" — закрыть, "forward" — отправить дальше по workflow, "return" — вернуть.
+Идентификатор задачи: id (целое число из поля id) ИЛИ number (строка вида "57.11" из поля full_number). Одно из них обязательно.
 status_id опционален — если не указан, используется статус по умолчанию для действия.
 text — комментарий, который сохранится в логе.`,
 	}, taskActionHandler(tc))
@@ -116,8 +117,9 @@ func createTaskHandler(tc *tracker.Client) func(context.Context, *mcp.CallToolRe
 }
 
 type taskActionArgs struct {
-	ID                int    `json:"id"`
-	Action            string `json:"action"` // return | forward | close
+	ID                int    `json:"id,omitempty"`
+	Number            string `json:"number,omitempty"` // формат "57.11" — альтернатива id
+	Action            string `json:"action"`            // return | forward | close
 	StatusID          int    `json:"status_id,omitempty"`
 	Text              string `json:"text,omitempty"`
 	AssignedContactID int    `json:"assigned_contact_id,omitempty"`
@@ -125,14 +127,25 @@ type taskActionArgs struct {
 
 func taskActionHandler(tc *tracker.Client) func(context.Context, *mcp.CallToolRequest, taskActionArgs) (*mcp.CallToolResult, any, error) {
 	return func(ctx context.Context, req *mcp.CallToolRequest, args taskActionArgs) (*mcp.CallToolResult, any, error) {
-		if args.ID == 0 {
-			return nil, nil, fmt.Errorf("id is required")
+		taskID := args.ID
+		if taskID == 0 && args.Number != "" {
+			tasks, err := tc.ListTasks(ctx, "number/"+args.Number, 1, 0)
+			if err != nil {
+				return nil, nil, fmt.Errorf("resolving number %q: %w", args.Number, err)
+			}
+			if len(tasks) == 0 {
+				return nil, nil, fmt.Errorf("task %q not found", args.Number)
+			}
+			taskID = tasks[0].ID
+		}
+		if taskID == 0 {
+			return nil, nil, fmt.Errorf("id or number is required")
 		}
 		if args.Action != "return" && args.Action != "forward" && args.Action != "close" {
 			return nil, nil, fmt.Errorf(`action must be one of: "return", "forward", "close"`)
 		}
 		err := tc.TaskAction(ctx, tracker.ActionInput{
-			ID:                args.ID,
+			ID:                taskID,
 			Action:            args.Action,
 			StatusID:          args.StatusID,
 			Text:              args.Text,
