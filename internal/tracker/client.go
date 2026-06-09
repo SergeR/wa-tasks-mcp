@@ -9,8 +9,11 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"sync"
 	"time"
 )
+
+const cacheTTL = 5 * time.Minute
 
 // Client — тонкая обёртка над Webasyst Tasks API.
 // Все методы — RPC-style: /api.php/{method}.
@@ -18,6 +21,12 @@ type Client struct {
 	baseURL     string // например, https://tracker.example.com/api.php
 	accessToken string
 	http        *http.Client
+
+	mu             sync.Mutex
+	statusCache    []Status
+	statusCacheAt  time.Time
+	projectCache   []Project
+	projectCacheAt time.Time
 }
 
 func New(baseURL, accessToken string) *Client {
@@ -228,40 +237,70 @@ func (c *Client) TaskAction(ctx context.Context, in ActionInput) error {
 }
 
 func (c *Client) ListProjects(ctx context.Context) ([]Project, error) {
+	c.mu.Lock()
+	if c.projectCache != nil && time.Since(c.projectCacheAt) < cacheTTL {
+		cached := c.projectCache
+		c.mu.Unlock()
+		return cached, nil
+	}
+	c.mu.Unlock()
+
 	var raw json.RawMessage
 	if err := c.doGet(ctx, "tasks.projects.getList", nil, &raw); err != nil {
 		return nil, err
 	}
+
+	var result []Project
 	if len(raw) > 0 && raw[0] == '[' {
-		var asList []Project
-		if err := json.Unmarshal(raw, &asList); err == nil {
-			return asList, nil
+		if err := json.Unmarshal(raw, &result); err == nil {
+			c.mu.Lock()
+			c.projectCache, c.projectCacheAt = result, time.Now()
+			c.mu.Unlock()
+			return result, nil
 		}
 	}
 	var wrap struct {
 		Data []Project `json:"data"`
 	}
 	if err := json.Unmarshal(raw, &wrap); err == nil {
+		c.mu.Lock()
+		c.projectCache, c.projectCacheAt = wrap.Data, time.Now()
+		c.mu.Unlock()
 		return wrap.Data, nil
 	}
 	return nil, fmt.Errorf("unexpected response shape: %s", string(raw))
 }
 
 func (c *Client) ListStatuses(ctx context.Context) ([]Status, error) {
+	c.mu.Lock()
+	if c.statusCache != nil && time.Since(c.statusCacheAt) < cacheTTL {
+		cached := c.statusCache
+		c.mu.Unlock()
+		return cached, nil
+	}
+	c.mu.Unlock()
+
 	var raw json.RawMessage
 	if err := c.doGet(ctx, "tasks.statuses.getList", nil, &raw); err != nil {
 		return nil, err
 	}
+
+	var result []Status
 	if len(raw) > 0 && raw[0] == '[' {
-		var asList []Status
-		if err := json.Unmarshal(raw, &asList); err == nil {
-			return asList, nil
+		if err := json.Unmarshal(raw, &result); err == nil {
+			c.mu.Lock()
+			c.statusCache, c.statusCacheAt = result, time.Now()
+			c.mu.Unlock()
+			return result, nil
 		}
 	}
 	var wrap struct {
 		Data []Status `json:"data"`
 	}
 	if err := json.Unmarshal(raw, &wrap); err == nil {
+		c.mu.Lock()
+		c.statusCache, c.statusCacheAt = wrap.Data, time.Now()
+		c.mu.Unlock()
 		return wrap.Data, nil
 	}
 	return nil, fmt.Errorf("unexpected response shape: %s", string(raw))
