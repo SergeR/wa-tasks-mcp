@@ -97,6 +97,24 @@ type ActionInput struct {
 	AssignedContactID int    `json:"assigned_contact_id,omitempty"`
 }
 
+type AddCommentInput struct {
+	TaskID int    `json:"task_id"`
+	Text   string `json:"text"`
+}
+
+type UpdateCommentInput struct {
+	ID   int    `json:"id"` // ID записи в логе (возвращается из AddComment)
+	Text string `json:"text"`
+}
+
+// LogEntry — запись в логе действий задачи (комментарий, смена статуса и т.п.)
+type LogEntry struct {
+	ID       int    `json:"id"`
+	TaskID   int    `json:"task_id,omitempty"`
+	Text     string `json:"text,omitempty"`
+	Datetime string `json:"datetime,omitempty"`
+}
+
 // ----- transport -----
 
 type apiError struct {
@@ -234,6 +252,22 @@ func (c *Client) CreateTask(ctx context.Context, in CreateTaskInput) (*Task, err
 
 func (c *Client) TaskAction(ctx context.Context, in ActionInput) error {
 	return c.doPost(ctx, "tasks.tasks.action", in, nil)
+}
+
+func (c *Client) AddComment(ctx context.Context, in AddCommentInput) (*LogEntry, error) {
+	var out LogEntry
+	if err := c.doPost(ctx, "tasks.comments.add", in, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) UpdateComment(ctx context.Context, in UpdateCommentInput) (*LogEntry, error) {
+	var out LogEntry
+	if err := c.doPost(ctx, "tasks.comments.update", in, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 func (c *Client) ListProjects(ctx context.Context) ([]Project, error) {
