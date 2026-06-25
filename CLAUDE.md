@@ -86,6 +86,13 @@ The server exposes these tools to MCP clients:
 
 5. **list_statuses** — Get all task statuses (ID and name)
 
+6. **add_comment** — Add a comment to a task
+   - Required: `task_id` (int) or `number` (string like `"57.11"`), `text`
+   - Returns a log entry with `id` needed for `update_comment`
+
+7. **update_comment** — Edit an existing comment
+   - Required: `id` (log entry ID from `add_comment`), `text`
+
 ## Key Design Decisions
 
 - **Flexible Response Parsing**: The Webasyst API returns task lists in different formats depending on version or endpoint. The client uses `json.RawMessage` and attempts multiple shapes (bare array vs. object wrapper) to handle this gracefully.

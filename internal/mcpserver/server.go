@@ -56,6 +56,20 @@ text — комментарий, который сохранится в логе
 		Description: "Возвращает все статусы задач с их ID и названиями.",
 	}, listStatusesHandler(tc))
 
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "add_comment",
+		Description: `Добавляет комментарий к задаче.
+Идентификатор задачи: task_id (целое число) ИЛИ number (строка вида "57.11" из поля full_number). Одно из них обязательно.
+Возвращает запись лога с полем id — этот id нужен для update_comment.`,
+	}, addCommentHandler(tc))
+
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "update_comment",
+		Description: `Редактирует существующий комментарий к задаче.
+id — ID записи в логе (возвращается из add_comment или берётся из поля comment_log_id задачи).
+Заменяет текст комментария целиком.`,
+	}, updateCommentHandler(tc))
+
 	return s
 }
 
@@ -155,6 +169,66 @@ func taskActionHandler(tc *tracker.Client) func(context.Context, *mcp.CallToolRe
 			return nil, nil, err
 		}
 		return jsonResult(map[string]string{"status": "ok"})
+	}
+}
+
+type addCommentArgs struct {
+	TaskID int    `json:"task_id,omitempty"`
+	Number string `json:"number,omitempty"` // альтернатива task_id: "57.11"
+	Text   string `json:"text"`
+}
+
+func addCommentHandler(tc *tracker.Client) func(context.Context, *mcp.CallToolRequest, addCommentArgs) (*mcp.CallToolResult, any, error) {
+	return func(ctx context.Context, req *mcp.CallToolRequest, args addCommentArgs) (*mcp.CallToolResult, any, error) {
+		taskID := args.TaskID
+		if taskID == 0 && args.Number != "" {
+			tasks, err := tc.ListTasks(ctx, "number/"+args.Number, 1, 0)
+			if err != nil {
+				return nil, nil, fmt.Errorf("resolving number %q: %w", args.Number, err)
+			}
+			if len(tasks) == 0 {
+				return nil, nil, fmt.Errorf("task %q not found", args.Number)
+			}
+			taskID = tasks[0].ID
+		}
+		if taskID == 0 {
+			return nil, nil, fmt.Errorf("task_id or number is required")
+		}
+		if args.Text == "" {
+			return nil, nil, fmt.Errorf("text is required")
+		}
+		entry, err := tc.AddComment(ctx, tracker.AddCommentInput{
+			TaskID: taskID,
+			Text:   args.Text,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		return jsonResult(entry)
+	}
+}
+
+type updateCommentArgs struct {
+	ID   int    `json:"id"`
+	Text string `json:"text"`
+}
+
+func updateCommentHandler(tc *tracker.Client) func(context.Context, *mcp.CallToolRequest, updateCommentArgs) (*mcp.CallToolResult, any, error) {
+	return func(ctx context.Context, req *mcp.CallToolRequest, args updateCommentArgs) (*mcp.CallToolResult, any, error) {
+		if args.ID == 0 {
+			return nil, nil, fmt.Errorf("id is required")
+		}
+		if args.Text == "" {
+			return nil, nil, fmt.Errorf("text is required")
+		}
+		entry, err := tc.UpdateComment(ctx, tracker.UpdateCommentInput{
+			ID:   args.ID,
+			Text: args.Text,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		return jsonResult(entry)
 	}
 }
 

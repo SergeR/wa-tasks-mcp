@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-06-26
+
+### Added
+- `add_comment` tool — add a comment to a task (by `task_id` or `full_number`)
+- `update_comment` tool — edit an existing comment by log entry ID
+
+## [0.2.0] - 2026-06-26
+
+### Added
+- In-memory cache for `list_statuses` and `list_projects` (TTL 5 min) to reduce redundant API calls
+
 ## [0.1.0] - 2026-05-17
 
 ### Added
