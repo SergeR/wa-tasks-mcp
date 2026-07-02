@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-07-03
+
+### Added
+- `update_task` tool — edit properties of an existing task (name, text, assigned contact, project, milestone, priority, status, due date), addressed by `id` or `full_number`. Unspecified fields are left unchanged.
+
 ## [0.3.0] - 2026-06-26
 
 ### Added

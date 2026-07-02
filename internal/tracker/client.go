@@ -49,6 +49,7 @@ type Task struct {
 	Number          int      `json:"number"`
 	FullNumber      string   `json:"full_number,omitempty"`
 	ProjectID       int      `json:"project_id"`
+	MilestoneID     *int     `json:"milestone_id,omitempty"`
 	StatusID        int      `json:"status_id"`
 	Name            string   `json:"name"`
 	Text            string   `json:"text,omitempty"`
@@ -58,6 +59,7 @@ type Task struct {
 	UpdateDatetime  string   `json:"update_datetime,omitempty"`
 	DueDate         string   `json:"due_date,omitempty"`
 	Priority        int      `json:"priority,omitempty"`
+	HiddenTimestamp *int     `json:"hidden_timestamp,omitempty"`
 }
 
 func fillFullNumber(tasks []Task) {
@@ -87,6 +89,41 @@ type CreateTaskInput struct {
 	Priority          int    `json:"priority,omitempty"`
 	DueDate           string `json:"due_date,omitempty"`
 	UUID              string `json:"uuid"`
+}
+
+// UpdateTaskInput описывает частичное обновление задачи. Указатели позволяют
+// отличить «поле не задано» (nil — оставить прежнее значение) от «поле
+// сброшено» (например, пустая строка) — это важно, поскольку сам API
+// tasks.tasks.update требует передавать все свойства задачи разом,
+// заменяя её целиком, а не только измененные поля.
+type UpdateTaskInput struct {
+	ID                  int
+	Name                *string
+	Text                *string
+	AssignedContactID   *int
+	ProjectID           *int
+	MilestoneID         *int
+	Priority            *int
+	StatusID            *int
+	HiddenTimestamp     *int
+	DueDate             *string
+	FilesHash           *string
+	AttachmentsToDelete []int
+}
+
+type updateTaskBody struct {
+	ID                  int     `json:"id"`
+	Name                string  `json:"name"`
+	Text                string  `json:"text"`
+	AssignedContactID   *int    `json:"assigned_contact_id"`
+	ProjectID           int     `json:"project_id"`
+	MilestoneID         *int    `json:"milestone_id"`
+	Priority            int     `json:"priority"`
+	StatusID            int     `json:"status_id"`
+	HiddenTimestamp     *int    `json:"hidden_timestamp"`
+	DueDate             *string `json:"due_date"`
+	FilesHash           *string `json:"files_hash"`
+	AttachmentsToDelete []int   `json:"attachments_to_delete,omitempty"`
 }
 
 type ActionInput struct {
@@ -242,6 +279,84 @@ func (c *Client) ListTasks(ctx context.Context, hash string, limit, offset int) 
 func (c *Client) CreateTask(ctx context.Context, in CreateTaskInput) (*Task, error) {
 	var out Task
 	if err := c.doPost(ctx, "tasks.tasks.add", in, &out); err != nil {
+		return nil, err
+	}
+	if out.ProjectID > 0 && out.Number > 0 {
+		out.FullNumber = fmt.Sprintf("%d.%d", out.ProjectID, out.Number)
+	}
+	return &out, nil
+}
+
+// UpdateTask обновляет задачу. Поскольку tasks.tasks.update заменяет свойства
+// задачи целиком, метод сначала подгружает её текущее состояние и заполняет
+// не указанные в in поля прежними значениями, чтобы их не потерять.
+func (c *Client) UpdateTask(ctx context.Context, in UpdateTaskInput) (*Task, error) {
+	if in.ID == 0 {
+		return nil, fmt.Errorf("id is required")
+	}
+
+	tasks, err := c.ListTasks(ctx, fmt.Sprintf("id/%d", in.ID), 1, 0)
+	if err != nil {
+		return nil, fmt.Errorf("fetching current task: %w", err)
+	}
+	if len(tasks) == 0 {
+		return nil, fmt.Errorf("task %d not found", in.ID)
+	}
+	cur := tasks[0]
+
+	body := updateTaskBody{
+		ID:                  in.ID,
+		Name:                cur.Name,
+		Text:                cur.Text,
+		ProjectID:           cur.ProjectID,
+		MilestoneID:         cur.MilestoneID,
+		Priority:            cur.Priority,
+		StatusID:            cur.StatusID,
+		HiddenTimestamp:     cur.HiddenTimestamp,
+		AttachmentsToDelete: in.AttachmentsToDelete,
+	}
+	if cur.AssignedContact != nil {
+		id := cur.AssignedContact.ID
+		body.AssignedContactID = &id
+	}
+	if cur.DueDate != "" {
+		d := cur.DueDate
+		body.DueDate = &d
+	}
+
+	if in.Name != nil {
+		body.Name = *in.Name
+	}
+	if in.Text != nil {
+		body.Text = *in.Text
+	}
+	if in.AssignedContactID != nil {
+		body.AssignedContactID = in.AssignedContactID
+	}
+	if in.ProjectID != nil {
+		body.ProjectID = *in.ProjectID
+	}
+	if in.MilestoneID != nil {
+		body.MilestoneID = in.MilestoneID
+	}
+	if in.Priority != nil {
+		body.Priority = *in.Priority
+	}
+	if in.StatusID != nil {
+		body.StatusID = *in.StatusID
+	}
+	if in.HiddenTimestamp != nil {
+		body.HiddenTimestamp = in.HiddenTimestamp
+	}
+	if in.DueDate != nil {
+		body.DueDate = in.DueDate
+	}
+	if in.FilesHash != nil {
+		body.FilesHash = in.FilesHash
+	}
+
+	var out Task
+	if err := c.doPost(ctx, "tasks.tasks.update", body, &out); err != nil {
 		return nil, err
 	}
 	if out.ProjectID > 0 && out.Number > 0 {

@@ -38,6 +38,14 @@ func New(tc *tracker.Client) *mcp.Server {
 	}, createTaskHandler(tc))
 
 	mcp.AddTool(s, &mcp.Tool{
+		Name: "update_task",
+		Description: `Обновляет свойства задачи (название, описание, проект, срок, исполнителя, приоритет, статус и т.д.).
+Идентификатор задачи: id (целое число) ИЛИ number (строка вида "57.11" из поля full_number). Одно из них обязательно.
+Указывайте только те поля, которые нужно изменить — остальные свойства задачи останутся без изменений.
+Для смены рабочего статуса задачи с переходом по workflow (закрыть/вернуть/переслать) используйте task_action, а не status_id здесь.`,
+	}, updateTaskHandler(tc))
+
+	mcp.AddTool(s, &mcp.Tool{
 		Name: "task_action",
 		Description: `Выполняет действие над задачей и переводит её в другой статус.
 action: "close" — закрыть, "forward" — отправить дальше по workflow, "return" — вернуть.
@@ -169,6 +177,55 @@ func taskActionHandler(tc *tracker.Client) func(context.Context, *mcp.CallToolRe
 			return nil, nil, err
 		}
 		return jsonResult(map[string]string{"status": "ok"})
+	}
+}
+
+type updateTaskArgs struct {
+	ID                  int     `json:"id,omitempty"`
+	Number              string  `json:"number,omitempty"` // формат "57.11" — альтернатива id
+	Name                *string `json:"name,omitempty"`
+	Text                *string `json:"text,omitempty"`
+	AssignedContactID   *int    `json:"assigned_contact_id,omitempty"`
+	ProjectID           *int    `json:"project_id,omitempty"`
+	MilestoneID         *int    `json:"milestone_id,omitempty"`
+	Priority            *int    `json:"priority,omitempty"`
+	StatusID            *int    `json:"status_id,omitempty"`
+	DueDate             *string `json:"due_date,omitempty"`
+	AttachmentsToDelete []int   `json:"attachments_to_delete,omitempty"`
+}
+
+func updateTaskHandler(tc *tracker.Client) func(context.Context, *mcp.CallToolRequest, updateTaskArgs) (*mcp.CallToolResult, any, error) {
+	return func(ctx context.Context, req *mcp.CallToolRequest, args updateTaskArgs) (*mcp.CallToolResult, any, error) {
+		taskID := args.ID
+		if taskID == 0 && args.Number != "" {
+			tasks, err := tc.ListTasks(ctx, "number/"+args.Number, 1, 0)
+			if err != nil {
+				return nil, nil, fmt.Errorf("resolving number %q: %w", args.Number, err)
+			}
+			if len(tasks) == 0 {
+				return nil, nil, fmt.Errorf("task %q not found", args.Number)
+			}
+			taskID = tasks[0].ID
+		}
+		if taskID == 0 {
+			return nil, nil, fmt.Errorf("id or number is required")
+		}
+		task, err := tc.UpdateTask(ctx, tracker.UpdateTaskInput{
+			ID:                  taskID,
+			Name:                args.Name,
+			Text:                args.Text,
+			AssignedContactID:   args.AssignedContactID,
+			ProjectID:           args.ProjectID,
+			MilestoneID:         args.MilestoneID,
+			Priority:            args.Priority,
+			StatusID:            args.StatusID,
+			DueDate:             args.DueDate,
+			AttachmentsToDelete: args.AttachmentsToDelete,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		return jsonResult(task)
 	}
 }
 

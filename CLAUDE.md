@@ -78,19 +78,25 @@ The server exposes these tools to MCP clients:
    - Optional: `text`, `assigned_contact_id`, `status_id`, `priority`, `due_date`
    - Generates a UUID internally for idempotency
 
-3. **task_action** — Perform workflow transitions
+3. **update_task** — Edit properties of an existing task
+   - Required: task `id` (int) or `number` (string like `"57.11"`)
+   - Optional: `name`, `text`, `assigned_contact_id`, `project_id`, `milestone_id`, `priority`, `status_id`, `due_date`, `attachments_to_delete`
+   - Since `tasks.tasks.update` replaces the task's properties wholesale, the client first fetches the current task and fills in any field not passed by the caller, so unspecified fields are left unchanged
+   - For workflow status transitions (close/forward/return), prefer `task_action` instead
+
+4. **task_action** — Perform workflow transitions
    - Required: task `id`, `action` (one of: `"close"`, `"forward"`, `"return"`)
    - Optional: `status_id`, `text` (comment), `assigned_contact_id`
 
-4. **list_projects** — Get all available projects (ID and name)
+5. **list_projects** — Get all available projects (ID and name)
 
-5. **list_statuses** — Get all task statuses (ID and name)
+6. **list_statuses** — Get all task statuses (ID and name)
 
-6. **add_comment** — Add a comment to a task
+7. **add_comment** — Add a comment to a task
    - Required: `task_id` (int) or `number` (string like `"57.11"`), `text`
    - Returns a log entry with `id` needed for `update_comment`
 
-7. **update_comment** — Edit an existing comment
+8. **update_comment** — Edit an existing comment
    - Required: `id` (log entry ID from `add_comment`), `text`
 
 ## Key Design Decisions
@@ -116,7 +122,5 @@ No tests or linting configuration exist. No dependencies beyond `go-sdk` and `uu
 ## Future Improvements
 
 The README notes these potential enhancements:
-- Cache `list_projects` and `list_statuses` (rarely change, frequently requested)
-- Add `update_task` tool for editing task fields beyond status
 - Use MCP resources (instead of tools) for reference data
 - Add `outputSchema` to tools for structured Claude Code responses
