@@ -99,6 +99,11 @@ The server exposes these tools to MCP clients:
 8. **update_comment** — Edit an existing comment
    - Required: `id` (log entry ID from `add_comment`), `text`
 
+9. **list_comments** — Read comments on a task
+   - Required: task `id` (int) or `number` (string like `"57.11"`)
+   - Optional: `limit`, `offset`
+   - Uses `tasks.log.getList` filtered by `task_id` + `action=comment` (this filtering wasn't discoverable until a newer `tasks-v1.yaml` spec revealed the `task_id`/`action` query params)
+
 ## Key Design Decisions
 
 - **Flexible Response Parsing**: The Webasyst API returns task lists in different formats depending on version or endpoint. The client uses `json.RawMessage` and attempts multiple shapes (bare array vs. object wrapper) to handle this gracefully.

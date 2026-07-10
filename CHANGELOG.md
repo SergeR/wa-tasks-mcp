@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-07-10
+
+### Added
+- `list_comments` tool — read comments on a task (by `task_id` or `full_number`), backed by `tasks.log.getList` filtered by `task_id` + `action=comment`
+
 ## [0.4.0] - 2026-07-03
 
 ### Added
