@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -150,6 +151,39 @@ type LogEntry struct {
 	TaskID   int    `json:"task_id,omitempty"`
 	Text     string `json:"text,omitempty"`
 	Datetime string `json:"datetime,omitempty"`
+}
+
+// LogInfo — развёрнутая запись журнала действий (tasks.log.getList),
+// используется для чтения комментариев и истории задачи.
+type LogInfo struct {
+	ID                int      `json:"id"`
+	ProjectID         *int     `json:"project_id,omitempty"`
+	TaskID            int      `json:"task_id"`
+	Contact           *Contact `json:"contact,omitempty"`
+	Text              string   `json:"text,omitempty"`
+	TextStripped      string   `json:"text_stripped,omitempty"`
+	CreateDatetime    string   `json:"create_datetime,omitempty"`
+	BeforeStatusID    *int     `json:"before_status_id,omitempty"`
+	AfterStatusID     *int     `json:"after_status_id,omitempty"`
+	Action            string   `json:"action,omitempty"`
+	AssignedContact   *Contact `json:"assigned_contact,omitempty"`
+	StatusChanged     *bool    `json:"status_changed,omitempty"`
+	AssignmentChanged *bool    `json:"assignment_changed,omitempty"`
+	TaskNumber        *int     `json:"task_number,omitempty"`
+	TaskName          string   `json:"task_name,omitempty"`
+}
+
+// ListLogInput — параметры фильтрации tasks.log.getList.
+type ListLogInput struct {
+	ProjectID   *int
+	MilestoneID *int
+	ContactID   *int
+	TaskID      *int
+	Action      string
+	StartDate   string
+	EndDate     string
+	Limit       int
+	Offset      int
 }
 
 // ----- transport -----
@@ -383,6 +417,79 @@ func (c *Client) UpdateComment(ctx context.Context, in UpdateCommentInput) (*Log
 		return nil, err
 	}
 	return &out, nil
+}
+
+// ListLog возвращает записи журнала действий (tasks.log.getList), включая
+// комментарии. Для чтения комментариев конкретной задачи передавайте
+// TaskID и Action: "comment".
+func (c *Client) ListLog(ctx context.Context, in ListLogInput) ([]LogInfo, int, error) {
+	q := url.Values{}
+	q.Set("offset", strconv.Itoa(in.Offset)) // обязательный параметр API
+	if in.ProjectID != nil {
+		q.Set("project_id", strconv.Itoa(*in.ProjectID))
+	}
+	if in.MilestoneID != nil {
+		q.Set("milestone_id", strconv.Itoa(*in.MilestoneID))
+	}
+	if in.ContactID != nil {
+		q.Set("contact_id", strconv.Itoa(*in.ContactID))
+	}
+	if in.TaskID != nil {
+		q.Set("task_id", strconv.Itoa(*in.TaskID))
+	}
+	if in.Action != "" {
+		q.Set("action", in.Action)
+	}
+	if in.StartDate != "" {
+		q.Set("start_date", in.StartDate)
+	}
+	if in.EndDate != "" {
+		q.Set("end_date", in.EndDate)
+	}
+	if in.Limit > 0 {
+		q.Set("limit", strconv.Itoa(in.Limit))
+	}
+
+	var wrap struct {
+		TotalCount int             `json:"total_count"`
+		Data       json.RawMessage `json:"data"`
+	}
+	if err := c.doGet(ctx, "tasks.log.getList", q, &wrap); err != nil {
+		return nil, 0, err
+	}
+
+	entries, err := parseLogData(wrap.Data)
+	if err != nil {
+		return nil, 0, err
+	}
+	return entries, wrap.TotalCount, nil
+}
+
+// parseLogData разбирает поле data ответа tasks.log.getList, которое может
+// прийти как массив записей или как объект, ключами которого являются ID
+// записей (та же непоследовательность форматов, что и в других методах API).
+func parseLogData(raw json.RawMessage) ([]LogInfo, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+	if raw[0] == '[' {
+		var list []LogInfo
+		if err := json.Unmarshal(raw, &list); err == nil {
+			return list, nil
+		}
+	}
+	if raw[0] == '{' {
+		var m map[string]LogInfo
+		if err := json.Unmarshal(raw, &m); err == nil {
+			list := make([]LogInfo, 0, len(m))
+			for _, v := range m {
+				list = append(list, v)
+			}
+			sort.Slice(list, func(i, j int) bool { return list[i].ID < list[j].ID })
+			return list, nil
+		}
+	}
+	return nil, fmt.Errorf("unexpected log data shape: %s", string(raw))
 }
 
 func (c *Client) ListProjects(ctx context.Context) ([]Project, error) {

@@ -78,6 +78,13 @@ id — ID записи в логе (возвращается из add_comment и
 Заменяет текст комментария целиком.`,
 	}, updateCommentHandler(tc))
 
+	mcp.AddTool(s, &mcp.Tool{
+		Name: "list_comments",
+		Description: `Возвращает комментарии к задаче (журнал действий, отфильтрованный по action="comment").
+Идентификатор задачи: task_id (целое число) ИЛИ number (строка вида "57.11" из поля full_number). Одно из них обязательно.
+Поддерживает пагинацию через limit и offset.`,
+	}, listCommentsHandler(tc))
+
 	return s
 }
 
@@ -286,6 +293,45 @@ func updateCommentHandler(tc *tracker.Client) func(context.Context, *mcp.CallToo
 			return nil, nil, err
 		}
 		return jsonResult(entry)
+	}
+}
+
+type listCommentsArgs struct {
+	TaskID int    `json:"task_id,omitempty"`
+	Number string `json:"number,omitempty"` // альтернатива task_id: "57.11"
+	Limit  int    `json:"limit,omitempty"`
+	Offset int    `json:"offset,omitempty"`
+}
+
+func listCommentsHandler(tc *tracker.Client) func(context.Context, *mcp.CallToolRequest, listCommentsArgs) (*mcp.CallToolResult, any, error) {
+	return func(ctx context.Context, req *mcp.CallToolRequest, args listCommentsArgs) (*mcp.CallToolResult, any, error) {
+		taskID := args.TaskID
+		if taskID == 0 && args.Number != "" {
+			tasks, err := tc.ListTasks(ctx, "number/"+args.Number, 1, 0)
+			if err != nil {
+				return nil, nil, fmt.Errorf("resolving number %q: %w", args.Number, err)
+			}
+			if len(tasks) == 0 {
+				return nil, nil, fmt.Errorf("task %q not found", args.Number)
+			}
+			taskID = tasks[0].ID
+		}
+		if taskID == 0 {
+			return nil, nil, fmt.Errorf("task_id or number is required")
+		}
+		entries, total, err := tc.ListLog(ctx, tracker.ListLogInput{
+			TaskID: &taskID,
+			Action: "comment",
+			Limit:  args.Limit,
+			Offset: args.Offset,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		return jsonResult(map[string]any{
+			"total_count": total,
+			"comments":    entries,
+		})
 	}
 }
 
